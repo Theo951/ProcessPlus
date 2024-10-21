@@ -45,3 +45,53 @@ void generate_histogram(const arma::vec &data, const std::string &filename) {
     plt::save(filename);
 }
 
+int main() {
+    crow::SimpleApp app;  // Define Crow web application
+
+    CROW_ROUTE(app, "/")([](){
+        return "Welcome to the Data Analysis Web App!";
+    });
+
+    CROW_ROUTE(app, "/upload").methods(crow::HTTPMethod::POST)([](const crow::request& req){
+        // Handle CSV upload (for simplicity, this assumes a file upload is handled here)
+        std::string filename = "uploaded_data.csv";
+        std::ofstream file(filename);
+        file << req.body;
+        file.close();
+
+        arma::mat data = load_csv(filename);
+
+        // Compute missing values and statistics
+        std::map<int, int> missing_values = count_missing_values(data);
+        std::map<std::string, arma::vec> stats = calculate_statistics(data);
+
+        // Create response JSON
+        crow::json::wvalue response;
+        response["missing_values"] = crow::json::wvalue::list();
+        for (const auto& [col, count] : missing_values) {
+            response["missing_values"].push_back({{"column", col}, {"missing_count", count}});
+        }
+
+        response["statistics"] = crow::json::wvalue::object();
+        for (const auto& [stat, values] : stats) {
+            response["statistics"][stat] = crow::json::wvalue::list();
+            for (double value : values) {
+                response["statistics"][stat].push_back(value);
+            }
+        }
+
+        return response;
+    });
+
+    CROW_ROUTE(app, "/visualize").methods(crow::HTTPMethod::POST)([](const crow::request& req){
+        // Visualize the data (assumes the histogram is requested)
+        arma::mat data = load_csv("uploaded_data.csv");
+
+        // Generate histogram for the first column as an example
+        generate_histogram(data.col(0), "histogram.png");
+
+        return crow::response(200, "Histogram generated. Check the file 'histogram.png'.");
+    });
+    // Specify the port below
+    app.port(numport).multithreaded().run();
+}
